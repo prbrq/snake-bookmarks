@@ -6,11 +6,6 @@ app = FastAPI()
 
 engine = create_engine("sqlite:///snake-bookmarks.db")
 
-class Item(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    name: str
-    price: float
-
 class Bookmark(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     url: str
@@ -26,18 +21,24 @@ class Bookmark_Tag(SQLModel, table=True):
     bookmark_id: int = Field(primary_key=True, foreign_key="bookmark.id")
     tag_id: int = Field(primary_key=True, foreign_key="tag.id")
 
+class BookmarkCreate(SQLModel):
+    url: str
+    title: str
+    description: str | None = None
+    tags: list[str] | None = None
+
 
 SQLModel.metadata.create_all(engine)
 
-@app.post("/items")
-def create_item(item: Item):
+@app.post("/bookmarks")
+def create_bookmark(bookmark: Bookmark):
     with Session(engine) as session:
-        session.add(item)
+        session.add(bookmark)
         session.commit()
-        session.refresh(item)
-        return item
+        session.refresh(bookmark)
+        return bookmark
 
-@app.get("/items")
-def get_items():
-    with Session(engine) as session:
-        return session.exec(select(Item)).all()
+# @app.get("/items")
+# def get_items():
+#     with Session(engine) as session:
+#         return session.exec(select(Item)).all()
