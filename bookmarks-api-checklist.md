@@ -9,10 +9,10 @@
 
 ## 2. Модели и миграции
 
-- [ ] Таблица `bookmarks` — id, url, title, description (nullable), created_at
-- [ ] Таблица `tags` — id, name (уникальное)
-- [ ] Таблица связи `bookmark_tags` — bookmark_id, tag_id
-- [ ] Связь many-to-many работает корректно
+- [x] Таблица `bookmarks` — id, url, title, description (nullable), created_at
+- [x] Таблица `tags` — id, name (уникальное)
+- [x] Таблица связи `bookmark_tags` — bookmark_id, tag_id
+- [x] Связь many-to-many работает корректно
 
 ## 3. CRUD закладок
 
