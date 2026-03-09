@@ -34,6 +34,13 @@ class BookmarkCreate(SQLModel):
     tags: list[str] = []
 
 
+class BookmarkUpdate(SQLModel):
+    url: str | None = None
+    title: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+
+
 class BookmarkRead(SQLModel):
     id: int
     url: str
@@ -122,6 +129,70 @@ def get_bookmark(bookmark_id: int):
         bookmark = session.get(Bookmark, bookmark_id)
         if not bookmark:
             raise HTTPException(status_code=404, detail="Bookmark not found")
+        tags = session.exec(
+            select(Tag)
+            .join(Bookmark_Tag)
+            .where(Bookmark_Tag.bookmark_id == bookmark.id)
+        ).all()
+        return BookmarkRead(
+            id=bookmark.id,
+            url=bookmark.url,
+            title=bookmark.title,
+            description=bookmark.description,
+            created_at=bookmark.created_at,
+            tags=[tag.name for tag in tags],
+        )
+
+
+@app.put("/bookmarks/{bookmark_id}", response_model=BookmarkRead)
+def update_bookmark(bookmark_id: int, bookmark_update: BookmarkUpdate):
+    with Session(engine) as session:
+        with session.begin():
+            bookmark = session.get(Bookmark, bookmark_id)
+            if not bookmark:
+                raise HTTPException(status_code=404, detail="Bookmark not found")
+
+            if bookmark_update.url is not None:
+                bookmark.url = bookmark_update.url
+            if bookmark_update.title is not None:
+                bookmark.title = bookmark_update.title
+            if bookmark_update.description is not None:
+                bookmark.description = bookmark_update.description
+
+            if bookmark_update.tags is not None:
+                old_links = session.exec(
+                    select(Bookmark_Tag).where(Bookmark_Tag.bookmark_id == bookmark.id)
+                ).all()
+                for link in old_links:
+                    session.delete(link)
+
+                tag_map = {}
+                for tag_name in bookmark_update.tags:
+                    if tag_name in tag_map:
+                        continue
+                    existing = session.exec(
+                        select(Tag).where(Tag.name == tag_name)
+                    ).first()
+                    if existing:
+                        tag_map[tag_name] = existing
+                    else:
+                        tag = Tag(name=tag_name)
+                        session.add(tag)
+                        session.flush()
+                        tag_map[tag_name] = tag
+
+                tag_list = list(tag_map.values())
+
+                session.add_all(
+                    [
+                        Bookmark_Tag(bookmark_id=bookmark.id, tag_id=tag.id)
+                        for tag in tag_list
+                    ]
+                )
+
+            session.flush()
+
+        session.refresh(bookmark)
         tags = session.exec(
             select(Tag)
             .join(Bookmark_Tag)
