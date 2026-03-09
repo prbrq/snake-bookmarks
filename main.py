@@ -208,6 +208,23 @@ def update_bookmark(bookmark_id: int, bookmark_update: BookmarkUpdate):
         )
 
 
+@app.delete("/bookmarks/{bookmark_id}", status_code=204)
+def delete_bookmark(bookmark_id: int):
+    with Session(engine) as session:
+        with session.begin():
+            bookmark = session.get(Bookmark, bookmark_id)
+            if not bookmark:
+                raise HTTPException(status_code=404, detail="Bookmark not found")
+
+            links = session.exec(
+                select(Bookmark_Tag).where(Bookmark_Tag.bookmark_id == bookmark_id)
+            ).all()
+            for link in links:
+                session.delete(link)
+
+            session.delete(bookmark)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/docs")
