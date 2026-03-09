@@ -31,7 +31,16 @@ class BookmarkCreate(SQLModel):
     url: str
     title: str
     description: str | None = None
-    tags: list[str] | None = None
+    tags: list[str] = []
+
+
+class BookmarkRead(SQLModel):
+    id: int
+    url: str
+    title: str
+    description: str | None = None
+    created_at: datetime
+    tags: list[str] = []
 
 
 SQLModel.metadata.create_all(engine)
@@ -41,11 +50,14 @@ SQLModel.metadata.create_all(engine)
 def create_bookmark(bookmark_create: BookmarkCreate):
     with Session(engine) as session:
         with session.begin():
+            bookmark_with_existing_url = session.exec(
+                select(Bookmark).where(Bookmark.url == bookmark_create.url)
+            ).first()
 
-            bookmark_with_existing_url = session.exec(select(Bookmark).where(Bookmark.url == bookmark_create.url)).first()
-
-            if (bookmark_with_existing_url):
-                raise HTTPException(status_code=409, detail="Bookmark with this URL already exists")
+            if bookmark_with_existing_url:
+                raise HTTPException(
+                    status_code=409, detail="Bookmark with this URL already exists"
+                )
 
             bookmark = Bookmark(
                 url=bookmark_create.url,
@@ -83,10 +95,49 @@ def create_bookmark(bookmark_create: BookmarkCreate):
         return {"id": bookmark.id}
 
 
-# @app.get("/items")
-# def get_items():
-#     with Session(engine) as session:
-#         return session.exec(select(Item)).all()
+@app.get("/bookmarks", response_model=list[BookmarkRead])
+def get_bookmarks():
+    with Session(engine) as session:
+        bookmarks = session.exec(select(Bookmark)).all()
+        return [
+            BookmarkRead(
+                id=bookmark.id,
+                url=bookmark.url,
+                title=bookmark.title,
+                description=bookmark.description,
+                created_at=bookmark.created_at,
+                tags=[
+                    tag.name
+                    for tag in session.exec(
+                        select(Tag)
+                        .join(Bookmark_Tag)
+                        .where(Bookmark_Tag.bookmark_id == bookmark.id)
+                    ).all()
+                ],
+            )
+            for bookmark in bookmarks
+        ]
+
+
+@app.get("/bookmarks/{bookmark_id}", response_model=BookmarkRead)
+def get_bookmark(bookmark_id: int):
+    with Session(engine) as session:
+        bookmark = session.get(Bookmark, bookmark_id)
+        if not bookmark:
+            raise HTTPException(status_code=404, detail="Bookmark not found")
+        tags = session.exec(
+            select(Tag)
+            .join(Bookmark_Tag)
+            .where(Bookmark_Tag.bookmark_id == bookmark.id)
+        ).all()
+        return BookmarkRead(
+            id=bookmark.id,
+            url=bookmark.url,
+            title=bookmark.title,
+            description=bookmark.description,
+            created_at=bookmark.created_at,
+            tags=[tag.name for tag in tags],
+        )
 
 
 @app.get("/", include_in_schema=False)
