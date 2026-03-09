@@ -43,9 +43,6 @@ class BookmarkRead(SQLModel):
     tags: list[str] = []
 
 
-SQLModel.metadata.create_all(engine)
-
-
 @app.post("/bookmarks", status_code=201)
 def create_bookmark(bookmark_create: BookmarkCreate):
     with Session(engine) as session:
