@@ -11,7 +11,7 @@ engine = create_engine("sqlite:///snake-bookmarks.db")
 
 class Bookmark(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    url: str
+    url: str = Field(unique=True)
     title: str
     description: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
