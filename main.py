@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 from datetime import datetime
 from fastapi.responses import RedirectResponse
+from fastapi import HTTPException
 
 app = FastAPI()
 
@@ -40,6 +41,12 @@ SQLModel.metadata.create_all(engine)
 def create_bookmark(bookmark_create: BookmarkCreate):
     with Session(engine) as session:
         with session.begin():
+
+            bookmark_with_existing_url = session.exec(select(Bookmark).where(Bookmark.url == bookmark_create.url)).first()
+
+            if (bookmark_with_existing_url):
+                raise HTTPException(status_code=409, detail="Bookmark with this URL already exists")
+
             bookmark = Bookmark(
                 url=bookmark_create.url,
                 title=bookmark_create.title,
