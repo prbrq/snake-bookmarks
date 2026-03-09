@@ -100,9 +100,15 @@ def create_bookmark(bookmark_create: BookmarkCreate):
 
 
 @app.get("/bookmarks", response_model=list[BookmarkRead])
-def get_bookmarks():
+def get_bookmarks(tag: str | None = None):
     with Session(engine) as session:
-        bookmarks = session.exec(select(Bookmark)).all()
+        if tag:
+            bookmarks = session.exec(
+                select(Bookmark).join(Bookmark_Tag).join(Tag).where(Tag.name == tag)
+            ).all()
+        else:
+            bookmarks = session.exec(select(Bookmark)).all()
+
         return [
             BookmarkRead(
                 id=bookmark.id,
