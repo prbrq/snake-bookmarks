@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from sqlmodel import SQLModel, Field, create_engine, Session, select
+from sqlmodel import SQLModel, Field, create_engine, Session, select, func, col
 from datetime import datetime
 from fastapi.responses import RedirectResponse
 from fastapi import HTTPException
@@ -48,6 +48,11 @@ class BookmarkRead(SQLModel):
     description: str | None = None
     created_at: datetime
     tags: list[str] = []
+
+
+class BookmarkList(SQLModel):
+    items: list[BookmarkRead]
+    total: int
 
 
 def _get_tags(session: Session, bookmark_id: int | None) -> list[str]:
@@ -120,20 +125,23 @@ def create_bookmark(bookmark_create: BookmarkCreate):
         return {"id": bookmark.id}
 
 
-@app.get("/bookmarks", response_model=list[BookmarkRead])
-def get_bookmarks(tag: str | None = None):
+@app.get("/bookmarks", response_model=BookmarkList)
+def get_bookmarks(tag: str | None = None, limit: int = 20, offset: int = 0):
     with Session(engine) as session:
         if tag:
-            bookmarks = session.exec(
-                select(Bookmark).join(Bookmark_Tag).join(Tag).where(Tag.name == tag)
-            ).all()
+            base = select(Bookmark).join(Bookmark_Tag).join(Tag).where(Tag.name == tag)
         else:
-            bookmarks = session.exec(select(Bookmark)).all()
+            base = select(Bookmark)
 
-        return [
-            _to_read(bookmark, _get_tags(session, bookmark.id))
-            for bookmark in bookmarks
-        ]
+        total = session.exec(select(func.count()).select_from(base.subquery())).one()
+        bookmarks = session.exec(
+            base.order_by(col(Bookmark.created_at).desc()).offset(offset).limit(limit)
+        ).all()
+
+        return BookmarkList(
+            items=[_to_read(b, _get_tags(session, b.id)) for b in bookmarks],
+            total=total,
+        )
 
 
 @app.get("/bookmarks/{bookmark_id}", response_model=BookmarkRead)
