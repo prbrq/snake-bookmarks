@@ -50,6 +50,46 @@ class BookmarkRead(SQLModel):
     tags: list[str] = []
 
 
+def _get_tags(session: Session, bookmark_id: int | None) -> list[str]:
+    if bookmark_id is None:
+        return []
+    return [
+        tag.name
+        for tag in session.exec(
+            select(Tag)
+            .join(Bookmark_Tag)
+            .where(Bookmark_Tag.bookmark_id == bookmark_id)
+        ).all()
+    ]
+
+
+def _to_read(bookmark: Bookmark, tags: list[str]) -> BookmarkRead:
+    return BookmarkRead(
+        id=bookmark.id,
+        url=bookmark.url,
+        title=bookmark.title,
+        description=bookmark.description,
+        created_at=bookmark.created_at,
+        tags=tags,
+    )
+
+
+def _upsert_tags(session: Session, tag_names: list[str]) -> list[Tag]:
+    tags = []
+    seen: set[str] = set()
+    for name in tag_names:
+        if name in seen:
+            continue
+        seen.add(name)
+        tag = session.exec(select(Tag).where(Tag.name == name)).first()
+        if not tag:
+            tag = Tag(name=name)
+            session.add(tag)
+            session.flush()
+        tags.append(tag)
+    return tags
+
+
 @app.post("/bookmarks", status_code=201)
 def create_bookmark(bookmark_create: BookmarkCreate):
     with Session(engine) as session:
@@ -73,27 +113,8 @@ def create_bookmark(bookmark_create: BookmarkCreate):
 
             session.flush()
 
-            tag_list = []
-
-            for tag_name in bookmark_create.tags:
-                existing = session.exec(select(Tag).where(Tag.name == tag_name)).first()
-                if existing:
-                    tag_list.append(existing)
-                else:
-                    tag = Tag(name=tag_name)
-                    session.add(tag)
-                    session.flush()
-                    tag_list.append(tag)
-
-            bookmark_tag_list = []
-
-            for tag in tag_list:
-                bookmark_tag_list.append(
-                    Bookmark_Tag(bookmark_id=bookmark.id, tag_id=tag.id)
-                )
-
-            for bookmark_tag in bookmark_tag_list:
-                session.add(bookmark_tag)
+            for tag in _upsert_tags(session, bookmark_create.tags):
+                session.add(Bookmark_Tag(bookmark_id=bookmark.id, tag_id=tag.id))
 
         session.refresh(bookmark)
         return {"id": bookmark.id}
@@ -110,21 +131,7 @@ def get_bookmarks(tag: str | None = None):
             bookmarks = session.exec(select(Bookmark)).all()
 
         return [
-            BookmarkRead(
-                id=bookmark.id,
-                url=bookmark.url,
-                title=bookmark.title,
-                description=bookmark.description,
-                created_at=bookmark.created_at,
-                tags=[
-                    tag.name
-                    for tag in session.exec(
-                        select(Tag)
-                        .join(Bookmark_Tag)
-                        .where(Bookmark_Tag.bookmark_id == bookmark.id)
-                    ).all()
-                ],
-            )
+            _to_read(bookmark, _get_tags(session, bookmark.id))
             for bookmark in bookmarks
         ]
 
@@ -135,19 +142,7 @@ def get_bookmark(bookmark_id: int):
         bookmark = session.get(Bookmark, bookmark_id)
         if not bookmark:
             raise HTTPException(status_code=404, detail="Bookmark not found")
-        tags = session.exec(
-            select(Tag)
-            .join(Bookmark_Tag)
-            .where(Bookmark_Tag.bookmark_id == bookmark.id)
-        ).all()
-        return BookmarkRead(
-            id=bookmark.id,
-            url=bookmark.url,
-            title=bookmark.title,
-            description=bookmark.description,
-            created_at=bookmark.created_at,
-            tags=[tag.name for tag in tags],
-        )
+        return _to_read(bookmark, _get_tags(session, bookmark.id))
 
 
 @app.put("/bookmarks/{bookmark_id}", response_model=BookmarkRead)
@@ -166,52 +161,22 @@ def update_bookmark(bookmark_id: int, bookmark_update: BookmarkUpdate):
                 bookmark.description = bookmark_update.description
 
             if bookmark_update.tags is not None:
-                old_links = session.exec(
+                for link in session.exec(
                     select(Bookmark_Tag).where(Bookmark_Tag.bookmark_id == bookmark.id)
-                ).all()
-                for link in old_links:
+                ).all():
                     session.delete(link)
-
-                tag_map = {}
-                for tag_name in bookmark_update.tags:
-                    if tag_name in tag_map:
-                        continue
-                    existing = session.exec(
-                        select(Tag).where(Tag.name == tag_name)
-                    ).first()
-                    if existing:
-                        tag_map[tag_name] = existing
-                    else:
-                        tag = Tag(name=tag_name)
-                        session.add(tag)
-                        session.flush()
-                        tag_map[tag_name] = tag
-
-                tag_list = list(tag_map.values())
 
                 session.add_all(
                     [
                         Bookmark_Tag(bookmark_id=bookmark.id, tag_id=tag.id)
-                        for tag in tag_list
+                        for tag in _upsert_tags(session, bookmark_update.tags)
                     ]
                 )
 
             session.flush()
 
         session.refresh(bookmark)
-        tags = session.exec(
-            select(Tag)
-            .join(Bookmark_Tag)
-            .where(Bookmark_Tag.bookmark_id == bookmark.id)
-        ).all()
-        return BookmarkRead(
-            id=bookmark.id,
-            url=bookmark.url,
-            title=bookmark.title,
-            description=bookmark.description,
-            created_at=bookmark.created_at,
-            tags=[tag.name for tag in tags],
-        )
+        return _to_read(bookmark, _get_tags(session, bookmark.id))
 
 
 @app.delete("/bookmarks/{bookmark_id}", status_code=204)
