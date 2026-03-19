@@ -72,6 +72,8 @@ class BookmarkRead(SQLModel):
 class BookmarkList(SQLModel):
     items: list[BookmarkRead]
     total: int
+    limit: int
+    offset: int
 
 
 class TagRead(SQLModel):
@@ -178,6 +180,8 @@ def get_bookmarks(tag: str | None = None, limit: int = 20, offset: int = 0):
         return BookmarkList(
             items=[_to_read(b, _get_tags(session, b.id)) for b in bookmarks],
             total=total,
+            limit=limit,
+            offset=offset,
         )
 
 
@@ -197,6 +201,8 @@ def search_bookmarks(q: str, limit: int = 20, offset: int = 0):
         return BookmarkList(
             items=[_to_read(b, _get_tags(session, b.id)) for b in bookmarks],
             total=total,
+            limit=limit,
+            offset=offset,
         )
 
 
