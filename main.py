@@ -55,6 +55,11 @@ class BookmarkList(SQLModel):
     total: int
 
 
+class TagRead(SQLModel):
+    name: str
+    bookmarks_count: int
+
+
 def _get_tags(session: Session, bookmark_id: int | None) -> list[str]:
     if bookmark_id is None:
         return []
@@ -93,6 +98,18 @@ def _upsert_tags(session: Session, tag_names: list[str]) -> list[Tag]:
             session.flush()
         tags.append(tag)
     return tags
+
+
+@app.get("/tags", response_model=list[TagRead])
+def get_tags():
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Tag.name, func.count(Bookmark_Tag.bookmark_id).label("bookmarks_count"))
+            .join(Bookmark_Tag, isouter=True)
+            .group_by(Tag.id)
+            .order_by(col(Tag.name))
+        ).all()
+        return [TagRead(name=name, bookmarks_count=count) for name, count in rows]
 
 
 @app.post("/bookmarks", status_code=201)
