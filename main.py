@@ -144,6 +144,25 @@ def get_bookmarks(tag: str | None = None, limit: int = 20, offset: int = 0):
         )
 
 
+@app.get("/bookmarks/search", response_model=BookmarkList)
+def search_bookmarks(q: str, limit: int = 20, offset: int = 0):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    pattern = f"%{q}%"
+    with Session(engine) as session:
+        base = select(Bookmark).where(
+            col(Bookmark.title).ilike(pattern) | col(Bookmark.description).ilike(pattern)
+        )
+        total = session.exec(select(func.count()).select_from(base.subquery())).one()
+        bookmarks = session.exec(
+            base.order_by(col(Bookmark.created_at).desc()).offset(offset).limit(limit)
+        ).all()
+        return BookmarkList(
+            items=[_to_read(b, _get_tags(session, b.id)) for b in bookmarks],
+            total=total,
+        )
+
+
 @app.get("/bookmarks/{bookmark_id}", response_model=BookmarkRead)
 def get_bookmark(bookmark_id: int):
     with Session(engine) as session:
