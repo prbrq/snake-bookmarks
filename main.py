@@ -88,6 +88,7 @@ def _upsert_tags(session: Session, tag_names: list[str]) -> list[Tag]:
     tags = []
     seen: set[str] = set()
     for name in tag_names:
+        name = name.lower()
         if name in seen:
             continue
         seen.add(name)
@@ -146,7 +147,7 @@ def create_bookmark(bookmark_create: BookmarkCreate):
 def get_bookmarks(tag: str | None = None, limit: int = 20, offset: int = 0):
     with Session(engine) as session:
         if tag:
-            base = select(Bookmark).join(Bookmark_Tag).join(Tag).where(Tag.name == tag)
+            base = select(Bookmark).join(Bookmark_Tag).join(Tag).where(Tag.name == tag.lower())
         else:
             base = select(Bookmark)
 
