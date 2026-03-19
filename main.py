@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from sqlmodel import SQLModel, Field, create_engine, Session, select, func, col
 from datetime import datetime
+from urllib.parse import urlparse
 from fastapi.responses import RedirectResponse
 from fastapi import HTTPException
+from pydantic import field_validator
 
 app = FastAPI()
 
@@ -27,18 +29,35 @@ class Bookmark_Tag(SQLModel, table=True):
     tag_id: int = Field(primary_key=True, foreign_key="tag.id")
 
 
+def _validate_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("Invalid URL: must start with http:// or https://")
+    return url
+
+
 class BookmarkCreate(SQLModel):
     url: str
-    title: str
+    title: str = Field(min_length=1)
     description: str | None = None
     tags: list[str] = []
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        return _validate_url(v)
 
 
 class BookmarkUpdate(SQLModel):
     url: str | None = None
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1)
     description: str | None = None
     tags: list[str] | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        return _validate_url(v)
 
 
 class BookmarkRead(SQLModel):
